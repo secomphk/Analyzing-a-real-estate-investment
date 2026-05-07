@@ -11,7 +11,7 @@ python = "^3.11"
 
 # Web framework
 fastapi = "^0.110.0"
-uvicorn = { extras = ["standard"], version = "^0.27.0" }
+uvicorn = { extras = ["standard"], version = ">=0.27,<0.47" }
 python-multipart = "^0.0.9"
 
 # Persistence
