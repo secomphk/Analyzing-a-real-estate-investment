@@ -169,7 +169,7 @@ jobs:
 
       - name: Notify Slack on failure
         if: failure()
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: slackapi/slack-github-action@v3.0.3
         with:
           payload: |
             {"text": "⚠️ ML retrain failed (run ${{ github.run_id }})"}
