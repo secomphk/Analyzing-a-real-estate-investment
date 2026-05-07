@@ -58,7 +58,7 @@ pytest-asyncio = "^0.23.5"
 pytest-cov = "^4.1.0"
 ruff = "^0.3.0"
 mypy = "^1.8.0"
-pre-commit = "^3.6.0"
+pre-commit = ">=3.6,<5.0"
 types-redis = "^4.6.0.20240106"
 
 [tool.poetry.group.optional.dependencies]
