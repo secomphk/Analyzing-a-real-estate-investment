@@ -364,6 +364,13 @@ def _load_verified_coords() -> dict[str, tuple[float, float]]:
     return out
 
 
+def _canonical_pnu(raw: str) -> str:
+    """Strip hyphens from a PNU. The seed data is human-readable
+    (``4128010500-1-0001-0000``) but the DB column is ``VARCHAR(19)``,
+    so we collapse to the canonical 19-digit form on insert."""
+    return raw.replace("-", "")
+
+
 async def _seed_buildings_and_stores(
     session: AsyncSession,
     brand_ids: dict[str, int],
@@ -380,11 +387,14 @@ async def _seed_buildings_and_stores(
     for s in STORES:
         # Verified Naver coordinates take precedence over placeholders.
         location = verified_coords.get(s["source_id"], s["location"])
+        # Normalise PNU once — DB column is VARCHAR(19), seed text uses
+        # human-readable hyphens.
+        pnu = _canonical_pnu(s["pnu"])
         # Building (one per PNU)
         await session.execute(
             pg_insert(Building)
             .values(
-                pnu=s["pnu"],
+                pnu=pnu,
                 address=s["address"],
                 region_code=s["region_code"],
                 parcel_area_m2=s["land_area_m2"],
@@ -419,7 +429,7 @@ async def _seed_buildings_and_stores(
                 address=s["address"],
                 region_code=s["region_code"],
                 location=_wkt_point(*location),
-                pnu=s["pnu"],
+                pnu=pnu,
                 store_type=s["store_type"],
                 purchase_date=s["purchase_date"],
                 construction_approval_date=s["construction_approval_date"],
@@ -437,7 +447,7 @@ async def _seed_buildings_and_stores(
                     "name": s["name"],
                     "address": s["address"],
                     "location": _wkt_point(*location),
-                    "pnu": s["pnu"],
+                    "pnu": pnu,
                     "store_type": s["store_type"],
                     "opened_at": s["opened_at"],
                     "land_area_m2": s["land_area_m2"],
@@ -462,7 +472,7 @@ async def _seed_buildings_and_stores(
             await session.execute(
                 pg_insert(OfficialLandPrice)
                 .values(
-                    pnu=s["pnu"],
+                    pnu=pnu,
                     year=year,
                     price_per_m2=price,
                     change_rate=change,

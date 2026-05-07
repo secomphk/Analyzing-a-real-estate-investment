@@ -36,7 +36,7 @@ async def list_projects(
             p.planned_announcement_date, p.planned_completion_date,
             (SELECT COUNT(*) FROM project_stages WHERE project_id = p.id) AS stage_count
         FROM projects p
-        WHERE (:region_code::text IS NULL OR p.region_code = :region_code)
+        WHERE (CAST(:region_code AS text) IS NULL OR p.region_code = :region_code)
         ORDER BY p.id
         LIMIT :limit OFFSET :offset
         """

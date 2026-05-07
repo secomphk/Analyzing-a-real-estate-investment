@@ -35,9 +35,9 @@ async def list_stores(
             sb.name AS brand_name, sb.category AS brand_category
         FROM stores s
         JOIN store_brands sb ON sb.id = s.brand_id
-        WHERE (:brand::text IS NULL OR sb.name = :brand)
-          AND (:store_type::text IS NULL OR s.store_type = :store_type)
-          AND (:region_code::text IS NULL OR s.region_code = :region_code)
+        WHERE (CAST(:brand AS text) IS NULL OR sb.name = :brand)
+          AND (CAST(:store_type AS text) IS NULL OR s.store_type = :store_type)
+          AND (CAST(:region_code AS text) IS NULL OR s.region_code = :region_code)
         ORDER BY s.id
         LIMIT :limit OFFSET :offset
         """

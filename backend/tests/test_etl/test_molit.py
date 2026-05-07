@@ -82,7 +82,9 @@ def test_normalize_row_converts_korean_amount_to_won() -> None:
     assert out["deal_amount_krw"] == 12_000_000_000
     assert out["area_m2"] == 350.5
     assert out["transaction_type"] == "land"
-    assert out["contract_date"] == "2024-01-15"
+    from datetime import date
+
+    assert out["contract_date"] == date(2024, 1, 15)
     assert out["region_code"] == "41280"
 
 
@@ -98,7 +100,9 @@ def test_normalize_row_handles_new_apis_data_go_kr_schema() -> None:
         "dealingGbn": "중개거래",
     }
     out = etl.normalize_row(raw, sigungu="41220", year_month="2024-03")
-    assert out["contract_date"] == "2024-03-15"
+    from datetime import date as _d
+
+    assert out["contract_date"] == _d(2024, 3, 15)
     assert out["deal_amount_krw"] == 300_000_000
     assert out["area_m2"] == 331.0
     assert out["use_district"] == "농림지역"

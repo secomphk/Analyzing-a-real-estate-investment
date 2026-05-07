@@ -354,6 +354,62 @@ async def _resolve_region_codes(
     return by_triple
 
 
+async def _ensure_admin_areas(
+    session: AsyncSession, rows: list[dict[str, Any]]
+) -> None:
+    """Make sure every ``region_code`` referenced by ``rows`` exists in
+    ``admin_areas`` so the FK on ``population_stats.region_code`` doesn't
+    reject inserts.
+
+    The data.go.kr ``admmCd`` is a stable 행정기관코드 that drills down to
+    통/반 level — far more granular than the dongs we shipped in seed.
+    For each new code we insert a minimal row tagged
+    ``level='eupmyeondong'`` with the dong name (or full sido/sigungu/dong
+    concatenation when present) and ``parent_code=NULL``. The row is
+    enough to satisfy the FK; richer hierarchy can be backfilled later.
+    """
+    seen_codes: set[str] = set()
+    payload = []
+    for r in rows:
+        code = r.get("region_code")
+        if not code or code in seen_codes:
+            continue
+        seen_codes.add(code)
+        # Build a friendly display name. data.go.kr returns blank tong/ban
+        # at lv=3, so dongNm alone is usually enough.
+        parts = [
+            r.get("sido_name"),
+            r.get("sigungu_name"),
+            r.get("dong_name"),
+        ]
+        if r.get("tong"):
+            parts.append(f"{r['tong']}통")
+        if r.get("ban"):
+            parts.append(f"{r['ban']}반")
+        name = " ".join(p for p in parts if p) or code
+        payload.append({"code": code, "name": name})
+
+    if not payload:
+        return
+
+    stmt = text(
+        """
+        INSERT INTO admin_areas (code, name, level)
+        SELECT * FROM unnest(
+            CAST(:codes AS varchar[]),
+            CAST(:names AS varchar[]),
+            CAST(:levels AS admin_level[])
+        )
+        ON CONFLICT (code) DO NOTHING
+        """
+    ).bindparams(
+        bindparam("codes", value=[p["code"] for p in payload]),
+        bindparam("names", value=[p["name"] for p in payload]),
+        bindparam("levels", value=["eupmyeondong"] * len(payload)),
+    )
+    await session.execute(stmt)
+
+
 async def upsert_population(
     session: AsyncSession,
     rows: Iterable[dict[str, Any]],
@@ -362,14 +418,18 @@ async def upsert_population(
 ) -> int:
     """UPSERT population rows.
 
-    Rows that arrived from data.go.kr carry admin-area NAMES; we resolve
-    them to ``region_code`` via :func:`_resolve_region_codes` before the
-    insert. Rows that already have ``region_code`` (legacy path) skip
-    resolution.
+    For data.go.kr rows that carry ``region_code`` (admmCd) directly we
+    auto-create matching ``admin_areas`` entries first so the FK
+    constraint always succeeds. For legacy name-only rows we fall back
+    to :func:`_resolve_region_codes` against existing seed data.
     """
     rows_list = list(rows)
     if not rows_list:
         return 0
+
+    # Auto-create admin_areas rows for any region_codes we don't have yet.
+    if not dry_run:
+        await _ensure_admin_areas(session, rows_list)
 
     # One round-trip to map (sido, sigungu, dong) → region_code, but only
     # for rows that don't already carry a code. Skipped entirely for dry

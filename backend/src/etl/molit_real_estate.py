@@ -85,12 +85,13 @@ def normalize_row(raw: dict[str, Any], *, sigungu: str, year_month: str) -> dict
     deterministic ``source_id`` from the natural keys (sggCd + jibun +
     deal date + amount + area), which makes UPSERTs idempotent.
     """
+    from datetime import date  # noqa: PLC0415
+
     deal_year = raw.get("년") or raw.get("dealYear") or year_month.split("-")[0]
     deal_month = raw.get("월") or raw.get("dealMonth") or year_month.split("-")[1]
     deal_day = raw.get("일") or raw.get("dealDay") or "1"
-    contract_date = (
-        f"{int(deal_year):04d}-{int(deal_month):02d}-{int(deal_day):02d}"
-    )
+    contract_date = date(int(deal_year), int(deal_month), int(deal_day))
+    contract_date_iso = contract_date.isoformat()  # for source_id stability
 
     # Address: 법정동 (legacy) → umdNm (new). Combine with jibun for completeness.
     dong = raw.get("법정동") or raw.get("umdNm") or raw.get("dong") or raw.get("address")
@@ -115,7 +116,7 @@ def normalize_row(raw: dict[str, Any], *, sigungu: str, year_month: str) -> dict
         # Natural key — stable across retries since these fields don't change
         # for an already-recorded transaction.
         natural = "|".join([
-            region_code, contract_date, str(jibun or ""),
+            region_code, contract_date_iso, str(jibun or ""),
             str(deal_amount_man), str(deal_area or "0"),
         ])
         source_id = make_source_id(

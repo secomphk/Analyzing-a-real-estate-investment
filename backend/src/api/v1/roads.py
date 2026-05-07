@@ -35,7 +35,7 @@ async def list_roads(
                 SELECT COUNT(*) FROM road_expansion_stages WHERE road_id = rs.id
             ) AS stage_count
         FROM road_segments rs
-        WHERE (:region_code::text IS NULL OR rs.region_code = :region_code)
+        WHERE (CAST(:region_code AS text) IS NULL OR rs.region_code = :region_code)
         ORDER BY rs.id
         LIMIT :limit OFFSET :offset
         """

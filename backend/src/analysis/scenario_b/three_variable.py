@@ -193,8 +193,8 @@ class ThreeVariableAnalyzer:
             SELECT observed_at, aadt
             FROM traffic_volumes
             WHERE road_id = :road_id
-              AND (:start::date IS NULL OR observed_at >= :start)
-              AND (:end::date   IS NULL OR observed_at <= :end)
+              AND (CAST(:start AS date) IS NULL OR observed_at >= :start)
+              AND (CAST(:end   AS date) IS NULL OR observed_at <= :end)
             ORDER BY observed_at
             """
         ).bindparams(
@@ -217,10 +217,14 @@ class ThreeVariableAnalyzer:
                 ps.observed_at                      AS observed_at,
                 AVG(ps.total_population)::int       AS total_population
             FROM population_stats ps
-            JOIN road_segments rs ON rs.region_code = ps.region_code
+            -- region_code on road_segments is the 5-char 시군구 prefix
+            -- (e.g. '41220'); on population_stats it's the 10-digit
+            -- 행정기관코드 down to 통/반 level. Aggregate every dong row
+            -- whose code starts with the road's 시군구.
+            JOIN road_segments rs ON ps.region_code LIKE rs.region_code || '%'
             WHERE rs.id = :road_id
-              AND (:start::date IS NULL OR ps.observed_at >= :start)
-              AND (:end::date   IS NULL OR ps.observed_at <= :end)
+              AND (CAST(:start AS date) IS NULL OR ps.observed_at >= :start)
+              AND (CAST(:end   AS date) IS NULL OR ps.observed_at <= :end)
             GROUP BY ps.observed_at
             ORDER BY ps.observed_at
             """
