@@ -1,0 +1,86 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint-test:
+    name: Lint, type, test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
+      DATABASE_URL_SYNC: postgresql://ci:ci@localhost:5432/ci
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pipx install poetry==1.8.2
+
+      - name: Cache Poetry venv
+        uses: actions/cache@v4
+        with:
+          path: backend/.venv
+          key: poetry-${{ runner.os }}-${{ hashFiles('backend/poetry.lock', 'backend/pyproject.toml') }}
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Ruff
+        run: poetry run ruff check src/
+
+      - name: Mypy
+        run: poetry run mypy src/
+
+      - name: Pytest
+        run: poetry run pytest --cov=src --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to GitHub
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore

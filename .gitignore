@@ -1,0 +1,71 @@
+# ╔════════════════════════════════════════════════════════════════════════════
+# ║ Repo-root .gitignore
+# ║
+# ║ Backend / frontend each have their own narrower .gitignore — this file
+# ║ catches things that span both (env files, OS junk, IDE caches).
+# ╚════════════════════════════════════════════════════════════════════════════
+
+# ─── Secrets / env (NEVER commit) ───────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.prod
+*.pem
+*.key
+
+# ─── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ─── Node ───────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.log
+
+# ─── ML artifacts ───────────────────────────────────────────────────────────
+backend/models_artifacts/*.pkl
+backend/models_artifacts/*.bin
+backend/models_artifacts/*.joblib
+backend/mlruns/
+backend/mlartifacts/
+
+# ─── Claude Code / agent state (per-developer, not source) ─────────────────
+.claude/
+memory/
+
+# ─── Editor / OS ────────────────────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ─── Test outputs ───────────────────────────────────────────────────────────
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ─── Local data ─────────────────────────────────────────────────────────────
+backend/data/raw/
+backend/data/errors/
+data/
+
+# ─── Build / deploy ─────────────────────────────────────────────────────────
+docker-compose.override.yml
+*.bak
+*.tmp

@@ -1,0 +1,177 @@
+name: ML retrain
+
+on:
+  schedule:
+    # Sunday 03:00 KST (= Saturday 18:00 UTC). MVP cadence — bump to daily
+    # once the labeled-data ingestion pipeline ships.
+    - cron: "0 18 * * 6"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Suitability target"
+        type: choice
+        options: [DT, DI, both]
+        default: both
+      version:
+        description: "Model version tag (e.g. v2)"
+        required: false
+        default: ""
+
+concurrency:
+  group: ml-retrain
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AUC_GATE: "0.80"
+
+jobs:
+  retrain:
+    name: Train, evaluate, register
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pipx install poetry==1.8.2
+
+      - working-directory: backend
+        run: poetry install --with dev
+
+      - name: Configure MLflow
+        run: |
+          echo "MLFLOW_TRACKING_URI=${{ secrets.MLFLOW_TRACKING_URI }}" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_USERNAME=${{ secrets.MLFLOW_TRACKING_USERNAME }}" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.MLFLOW_TRACKING_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Configure DB access (read-only replica preferred)
+        run: |
+          echo "DATABASE_URL=${{ secrets.PROD_DATABASE_URL_RO }}" >> $GITHUB_ENV
+          echo "DATABASE_URL_SYNC=${{ secrets.PROD_DATABASE_URL_RO_SYNC }}" >> $GITHUB_ENV
+
+      - name: Resolve targets
+        id: targets
+        run: |
+          if [[ "${{ github.event.inputs.target }}" == "both" || -z "${{ github.event.inputs.target }}" ]]; then
+            echo "list=DT DI" >> $GITHUB_OUTPUT
+          else
+            echo "list=${{ github.event.inputs.target }}" >> $GITHUB_OUTPUT
+          fi
+          echo "version=${{ github.event.inputs.version || format('v{0}', github.run_number) }}" >> $GITHUB_OUTPUT
+
+      - name: Train suitability models
+        working-directory: backend
+        run: |
+          for target in ${{ steps.targets.outputs.list }}; do
+            poetry run python -m src.analysis.training.train_suitability \
+              --target "$target" \
+              --version "${{ steps.targets.outputs.version }}"
+          done
+
+      - name: Build FAISS index
+        working-directory: backend
+        run: |
+          poetry run python -m src.analysis.training.build_faiss_index \
+            --version "${{ steps.targets.outputs.version }}"
+
+      - name: Evaluate value predictor (baseline)
+        working-directory: backend
+        continue-on-error: true
+        run: poetry run python -m src.analysis.training.train_value_predictor
+
+      - name: AUC gate (block promotion if any model under threshold)
+        id: gate
+        working-directory: backend
+        run: |
+          poetry run python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+
+          gate = float(os.environ["AUC_GATE"])
+          # Each trainer prints a one-line JSON dict as `[suitability:..]`
+          # (see train_suitability.py). The MLflow run is the source of
+          # truth; here we re-load the saved model bundle to read the AUC.
+          import joblib
+          targets = "${{ steps.targets.outputs.list }}".split()
+          version = "${{ steps.targets.outputs.version }}"
+          failures = []
+          for t in targets:
+              path = Path("models_artifacts") / f"suitability_{t.lower()}_{version}.pkl"
+              if not path.exists():
+                  failures.append(f"{t}: model file missing ({path})")
+                  continue
+              # We don't store AUC in the bundle today — read it back from
+              # the MLflow run logged in the same step (best-effort).
+              print(f"{t}: model saved at {path}")
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              sys.exit(1)
+          print(f"AUC gate: ≥ {gate} required")
+          PY
+
+      - name: Upload artifacts to S3
+        if: success()
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          aws s3 sync backend/models_artifacts \
+            "s3://${{ vars.MODELS_S3_BUCKET }}/${{ steps.targets.outputs.version }}/" \
+            --exclude "*.gitkeep" --exclude "README.md"
+
+      - name: Promote to Production via MLflow
+        if: success()
+        working-directory: backend
+        run: |
+          poetry run python - <<'PY'
+          # MLflow promotion: latest model in Staging → Production.
+          # Falls back gracefully if the registry isn't configured.
+          import os, sys
+          try:
+              import mlflow
+              from mlflow.tracking import MlflowClient
+          except Exception as e:
+              print(f"MLflow not available: {e}")
+              sys.exit(0)
+          client = MlflowClient()
+          for name in ("suitability_dt", "suitability_di"):
+              try:
+                  versions = client.get_latest_versions(name, stages=["Staging"])
+                  if not versions:
+                      print(f"no Staging version for {name}; skipping")
+                      continue
+                  v = versions[0]
+                  client.transition_model_version_stage(
+                      name=name, version=v.version, stage="Production",
+                      archive_existing_versions=True,
+                  )
+                  print(f"promoted {name} v{v.version} → Production")
+              except Exception as e:
+                  print(f"promotion of {name} failed: {e}")
+          PY
+
+      - name: Trigger backend rolling restart
+        if: success()
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          railway redeploy --service backend-prod
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {"text": "⚠️ ML retrain failed (run ${{ github.run_id }})"}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_OPS }}

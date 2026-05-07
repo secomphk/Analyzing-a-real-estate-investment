@@ -1,0 +1,37 @@
+{
+  "_meta": {
+    "source": "Naver Local Search (verified via MCP during Stage 5)",
+    "verified_at": "2026-05-07",
+    "coverage": "partial — re-run `python -m src.scripts.enrich_seed_coords` with a Naver API key to fill the rest",
+    "coordinate_system": "WGS84 (EPSG:4326)"
+  },
+  "SB-PT-001": {
+    "status": "ok",
+    "query": "평택 비전동 스타벅스 DT",
+    "name": "스타벅스 평택비전DT점",
+    "address": "경기도 평택시 비전동 17-1",
+    "road_address": "경기도 평택시 비전4로 180",
+    "latitude": 37.0112538,
+    "longitude": 127.1046308
+  },
+  "SB-PT-002": {
+    "status": "needs_review",
+    "query": "평택 고덕면 스타벅스 DT",
+    "note": "Seed name 평택고덕DT점 — Naver returned no exact match in 고덕면. Closest alternative: 평택세교DT점."
+  },
+  "MD-PT-002": {
+    "status": "ok",
+    "query": "평택 용이동 맥도날드 DT",
+    "name": "스타벅스 평택용이DT점",
+    "address": "경기도 평택시 죽백동 646-2",
+    "road_address": "경기도 평택시 죽백3로 125",
+    "latitude": 37.0031406,
+    "longitude": 127.1290479,
+    "note": "Naver returned 스타벅스 instead of 맥도날드 for the 평택 DT keyword. Re-run enrichment script for correct McDonald's location."
+  },
+  "SB-BD-001": {
+    "status": "needs_review",
+    "query": "분당 정자동 스타벅스 DT",
+    "note": "Seed name 분당정자DT점 does not exist on Naver. Closest 분당 스타벅스 DT: 분당궁내DT점 (대왕판교로 302). Recommend renaming the seed entry."
+  }
+}

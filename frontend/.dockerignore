@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+.vite
+.cache
+coverage
+test-results
+playwright-report
+.env
+.env.*
+!.env.example
+.git
+.github
+README.md
+*.log

@@ -1,0 +1,119 @@
+name: Deploy → staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # One staging deploy at a time per branch — newer pushes cancel older ones.
+  group: deploy-staging
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}-backend
+  FRONTEND_IMAGE: ${{ github.repository }}-frontend
+
+jobs:
+  build-and-push:
+    name: Build & push images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_tag: ${{ steps.tags.outputs.backend_tag }}
+      frontend_tag: ${{ steps.tags.outputs.frontend_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: tags
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "backend_tag=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging-$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "frontend_tag=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging-$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.backend_tag }}
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:staging-latest
+          cache-from: type=gha,scope=backend-staging
+          cache-to: type=gha,mode=max,scope=backend-staging
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.frontend_tag }}
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging-latest
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL_STAGING }}
+            VITE_KAKAO_MAP_KEY=${{ secrets.VITE_KAKAO_MAP_KEY_STAGING }}
+          cache-from: type=gha,scope=frontend-staging
+          cache-to: type=gha,mode=max,scope=frontend-staging
+
+  migrate:
+    name: Run Alembic migrations
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pipx install poetry==1.8.2
+
+      - working-directory: backend
+        run: poetry install --with dev
+
+      - working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL_SYNC: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
+        run: poetry run alembic upgrade head
+
+  deploy:
+    name: Trigger Railway deploy
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Roll backend service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          # Railway CLI install + redeploy. The image tag is propagated
+          # via a service-level env var that the Dockerfile consumes.
+          curl -fsSL https://railway.app/install.sh | sh
+          railway redeploy --service backend-staging
+          railway redeploy --service frontend-staging
+
+      - name: Smoke test
+        run: |
+          # Allow a minute for replicas to come back into rotation.
+          for i in 1 2 3 4 5; do
+            if curl -fsS "${{ vars.STAGING_API_URL }}/health"; then
+              echo "OK"; exit 0
+            fi
+            sleep 12
+          done
+          echo "Staging health check failed"; exit 1

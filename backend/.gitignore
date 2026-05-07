@@ -1,0 +1,93 @@
+# ─── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ─── Virtual environments ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Poetry ─────────────────────────────────────────────────────────────────
+# Lockfile is committed; nothing to ignore here.
+
+# ─── Env / secrets ──────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ─── IDE / OS ───────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Testing / coverage ─────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# ─── Type checking ──────────────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# ─── ML artifacts (not committed; use MLflow / object storage) ──────────────
+models_artifacts/*.pkl
+models_artifacts/*.bin
+models_artifacts/*.joblib
+models_artifacts/*.onnx
+models_artifacts/*.h5
+models_artifacts/*.pt
+models_artifacts/*.pth
+!models_artifacts/.gitkeep
+
+# ─── Notebook outputs ───────────────────────────────────────────────────────
+notebooks/.ipynb_checkpoints/
+notebooks/*.ipynb
+!notebooks/.gitkeep
+
+# ─── MLflow ─────────────────────────────────────────────────────────────────
+mlruns/
+mlartifacts/
+
+# ─── Logs ───────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Docker ─────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Data ───────────────────────────────────────────────────────────────────
+data/raw/
+data/processed/
+*.csv.gz
+*.parquet

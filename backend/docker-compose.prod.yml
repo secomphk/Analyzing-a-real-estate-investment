@@ -1,0 +1,94 @@
+# Production compose. Designed for "single-host" deployments (one VM,
+# Railway/Render-style). For multi-host orchestration use the AWS ECS
+# variant in `docs/deployment.md`.
+#
+# Environment is supplied by `.env.prod` (NOT committed) — see
+# `.env.example` for the full list of variables.
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_postgis.sql:/docker-entrypoint-initdb.d/01_init_postgis.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: always
+
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/example/realestate-analyzer-backend:latest}
+    env_file:
+      - .env.prod
+    environment:
+      # Inject production-only settings here; secrets stay in .env.prod.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MIGRATE_ON_BOOT: "true"
+      UVICORN_WORKERS: "${BACKEND_WORKERS:-4}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: always
+    volumes:
+      - models_artifacts:/app/models_artifacts
+    deploy:
+      replicas: ${BACKEND_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "1"
+          memory: 1G
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/example/realestate-analyzer-frontend:latest}
+    environment:
+      BACKEND_UPSTREAM: backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: always
+    deploy:
+      replicas: ${FRONTEND_REPLICAS:-2}
+
+volumes:
+  postgres_data:
+  redis_data:
+  models_artifacts:

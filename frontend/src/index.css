@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pretendard loads via a <link> in index.html so PostCSS doesn't complain
+ * about @import order during the build. */
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-feature-settings: "ss06", "tnum";
+}
+
+/* Skeleton shimmer used by the loading states. */
+@keyframes shimmer {
+  0% {
+    background-position: -800px 0;
+  }
+  100% {
+    background-position: 800px 0;
+  }
+}
+
+.skeleton {
+  animation: shimmer 1.4s linear infinite;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 1600px 100%;
+}
