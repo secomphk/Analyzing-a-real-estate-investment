@@ -44,7 +44,7 @@ jobs:
           echo "frontend_tag=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:staging-$SHORT_SHA" >> $GITHUB_OUTPUT
 
       - name: Build & push backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: backend
           push: true
@@ -55,7 +55,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend-staging
 
       - name: Build & push frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: frontend
           push: true
