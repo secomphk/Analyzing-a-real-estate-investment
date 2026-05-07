@@ -27,7 +27,7 @@ ENV VITE_API_URL=$VITE_API_URL \
 RUN npm run build
 
 # ─── Runtime (nginx) ────────────────────────────────────────────────────────
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.29-alpine AS runtime
 
 # nginx in non-root mode listens on 8080 (privileged ports require root).
 RUN apk add --no-cache curl tini \
