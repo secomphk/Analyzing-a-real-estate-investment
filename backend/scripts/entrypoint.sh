@@ -29,10 +29,12 @@ if [[ "${MIGRATE_ON_BOOT:-false}" == "true" ]]; then
 fi
 
 WORKERS="${UVICORN_WORKERS:-1}"
-log "starting uvicorn (workers=${WORKERS})"
+# Railway / Render / Fly inject ${PORT}; locally we default to 8000.
+PORT_BIND="${PORT:-8000}"
+log "starting uvicorn (workers=${WORKERS}, port=${PORT_BIND})"
 exec uvicorn src.main:app \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port "${PORT_BIND}" \
     --workers "${WORKERS}" \
     --proxy-headers \
     --forwarded-allow-ips='*' \
