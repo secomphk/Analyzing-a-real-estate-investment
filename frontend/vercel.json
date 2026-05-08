@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://YOUR-RAILWAY-URL.up.railway.app/api/$1"
+      "destination": "https://analyzing-a-real-estate-investment-production.up.railway.app/api/$1"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
