@@ -44,6 +44,22 @@ if [[ "${MIGRATE_ON_BOOT:-false}" == "true" ]]; then
     fi
 fi
 
+# Seed-on-boot escape hatch: in environments where Railway's "Run Command"
+# UI is unreliable (or the operator just wants a one-shot seed without
+# spinning a separate worker), set ``SEED_ON_BOOT=true`` and the seed
+# script will run idempotently after migrations. Subsequent boots no-op
+# because the seed itself uses ON CONFLICT DO NOTHING. Flip the env var
+# off after first successful boot to stop the (cheap) extra step.
+if [[ "${SEED_ON_BOOT:-false}" == "true" ]]; then
+    log "running src.scripts.seed --scenario all (SEED_ON_BOOT=true)"
+    if python -m src.scripts.seed --scenario all; then
+        log "seed complete"
+    else
+        rc=$?
+        log "WARN: seed failed with exit code ${rc} — continuing with empty DB"
+    fi
+fi
+
 WORKERS="${UVICORN_WORKERS:-1}"
 # Railway / Render / Fly inject ${PORT}; locally we default to 8000.
 PORT_BIND="${PORT:-8000}"
