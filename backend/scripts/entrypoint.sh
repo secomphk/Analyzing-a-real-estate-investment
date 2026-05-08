@@ -23,10 +23,25 @@ if [[ -n "${MODELS_S3_URI:-}" ]]; then
     fi
 fi
 
+# Diagnostic: print the DB host/user the runtime is using (mask password)
+# so deploy logs reveal misconfigured DATABASE_URL without leaking secrets.
+if [[ -n "${DATABASE_URL:-}" ]]; then
+    masked=$(printf '%s' "${DATABASE_URL}" | sed -E 's#(://[^:]+:)[^@]+@#\1***@#')
+    log "DATABASE_URL = ${masked}"
+else
+    log "WARN: DATABASE_URL is not set"
+fi
+log "REDIS_URL set: $([[ -n "${REDIS_URL:-}" ]] && echo yes || echo no)"
+
 if [[ "${MIGRATE_ON_BOOT:-false}" == "true" ]]; then
     log "running alembic upgrade head (cold Postgres + PostGIS can take 60-120s)"
-    alembic upgrade head
-    log "alembic migration complete"
+    if alembic upgrade head; then
+        log "alembic migration complete"
+    else
+        rc=$?
+        log "ERROR: alembic upgrade head failed with exit code ${rc}"
+        log "starting uvicorn anyway so /health responds and we can debug"
+    fi
 fi
 
 WORKERS="${UVICORN_WORKERS:-1}"
