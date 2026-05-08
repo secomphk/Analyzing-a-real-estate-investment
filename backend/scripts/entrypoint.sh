@@ -50,8 +50,12 @@ fi
 # script will run idempotently after migrations. Subsequent boots no-op
 # because the seed itself uses ON CONFLICT DO NOTHING. Flip the env var
 # off after first successful boot to stop the (cheap) extra step.
-if [[ "${SEED_ON_BOOT:-false}" == "true" ]]; then
-    log "running src.scripts.seed --scenario all (SEED_ON_BOOT=true)"
+# Default to ``true`` for staging — seed is idempotent (ON CONFLICT DO
+# NOTHING) so every boot is cheap and the staging dashboard always has
+# data to render. Production should set ``SEED_ON_BOOT=false`` so prod
+# data isn't continuously overwritten on each deploy.
+if [[ "${SEED_ON_BOOT:-true}" == "true" ]]; then
+    log "running src.scripts.seed --scenario all (SEED_ON_BOOT default=true)"
     if python -m src.scripts.seed --scenario all; then
         log "seed complete"
     else
