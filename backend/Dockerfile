@@ -1,9 +1,17 @@
 # syntax=docker/dockerfile:1.6
 # Multi-stage build: builder installs deps with Poetry, runtime is slim.
+#
+# Base image is pinned to Debian Bookworm because the runtime stage
+# installs distro-specific package names (``libgdal32``, ``libgeos-c1v5``,
+# ``libproj25``) that don't exist verbatim on Trixie (where libgdal is now
+# called ``libgdal36``, libgeos is ``libgeos-c1t64`` after the t64
+# transition, etc.). Pinning the suffix keeps the apt list stable so the
+# ``apt-get install`` line below doesn't drift when upstream rebases the
+# Python images. Bump explicitly when we test against a newer Debian.
 ARG PYTHON_VERSION=3.11
 
 # ─── Builder ────────────────────────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-slim AS builder
+FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -36,7 +44,7 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --only main --no-root
 
 # ─── Runtime ────────────────────────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
