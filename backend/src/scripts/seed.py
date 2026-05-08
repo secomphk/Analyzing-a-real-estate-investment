@@ -583,44 +583,90 @@ async def _reset(session: AsyncSession) -> None:
 
 
 async def run(scenario: str, reset: bool, dry_run: bool) -> dict[str, int]:
+    """Seed orchestrator with phase-isolated transactions.
+
+    Each phase (admin / projects / roads+traffic+population / brands+stores)
+    runs in its own transaction. This means:
+
+    * Partial success persists — if ``stores`` raises, ``roads`` still
+      survives, so the dashboard renders something instead of going
+      empty after a failed redeploy.
+    * The phase that fails is precisely identifiable from logs.
+    * Idempotent re-runs (every boot when ``SEED_ON_BOOT=true``) cost
+      nothing because every insert is ``ON CONFLICT DO NOTHING/UPDATE``.
+
+    For ``--dry-run``, all phases roll back as before.
+    """
     settings = get_settings()
     engine = create_async_engine(settings.database_url, future=True)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     counts: dict[str, int] = {}
-    async with Session() as session, session.begin():
+
+    async def _phase(name: str, fn: Any) -> None:
+        """Run ``fn(session)`` in its own transaction; log per phase."""
+        # Stdout printing is the cheapest way to make the phase boundaries
+        # visible in Railway's deploy logs without depending on the
+        # structured logger config.
+        print(f"[seed] phase={name} start", flush=True)  # noqa: T201
+        async with Session() as session, session.begin():
+            try:
+                await fn(session)
+                if dry_run:
+                    await session.rollback()
+            except Exception as exc:  # noqa: BLE001
+                # Re-raise so the outer caller sees it, but emit a
+                # human-readable line first — Railway truncates
+                # tracebacks aggressively.
+                print(  # noqa: T201
+                    f"[seed] phase={name} FAILED type={type(exc).__name__} msg={exc!s}",
+                    flush=True,
+                )
+                raise
+        print(  # noqa: T201
+            f"[seed] phase={name} done counts={counts!r}", flush=True,
+        )
+
+    async def _phase_reset(s: AsyncSession) -> None:
         if reset:
-            await _reset(session)
+            await _reset(s)
 
-        counts["admin_areas"] = await _seed_admin_areas(session)
+    async def _phase_admin(s: AsyncSession) -> None:
+        counts["admin_areas"] = await _seed_admin_areas(s)
 
-        if scenario in ("a", "all"):
-            counts["projects"] = await _seed_projects(session)
+    async def _phase_projects(s: AsyncSession) -> None:
+        counts["projects"] = await _seed_projects(s)
 
-        if scenario in ("b", "all"):
-            roads_n, traffic_n, pop_n = await _seed_roads(session)
-            counts["roads"] = roads_n
-            counts["traffic_rows"] = traffic_n
-            counts["population_rows"] = pop_n
+    async def _phase_roads(s: AsyncSession) -> None:
+        roads_n, traffic_n, pop_n = await _seed_roads(s)
+        counts["roads"] = roads_n
+        counts["traffic_rows"] = traffic_n
+        counts["population_rows"] = pop_n
 
-        if scenario in ("c", "all"):
-            brand_ids = await _seed_brands(session)
-            counts["brands"] = len(brand_ids)
-            bld, sto, prc, tx = await _seed_buildings_and_stores(
-                session, brand_ids
-            )
-            counts["buildings"] = bld
-            counts["stores"] = sto
-            counts["land_prices"] = prc
-            counts["halo_transactions"] = tx
+    async def _phase_stores(s: AsyncSession) -> None:
+        brand_ids = await _seed_brands(s)
+        counts["brands"] = len(brand_ids)
+        bld, sto, prc, tx = await _seed_buildings_and_stores(s, brand_ids)
+        counts["buildings"] = bld
+        counts["stores"] = sto
+        counts["land_prices"] = prc
+        counts["halo_transactions"] = tx
 
-        if dry_run:
-            LOGGER.info("seed_dry_run", counts=counts)
-            await session.rollback()
-            return counts
+    if reset:
+        await _phase("reset", _phase_reset)
+    await _phase("admin_areas", _phase_admin)
+    if scenario in ("a", "all"):
+        await _phase("projects", _phase_projects)
+    if scenario in ("b", "all"):
+        await _phase("roads+traffic+population", _phase_roads)
+    if scenario in ("c", "all"):
+        await _phase("brands+stores+prices+halo", _phase_stores)
 
     await engine.dispose()
-    LOGGER.info("seed_complete", scenario=scenario, counts=counts)
+    if dry_run:
+        LOGGER.info("seed_dry_run", counts=counts)
+    else:
+        LOGGER.info("seed_complete", scenario=scenario, counts=counts)
     return counts
 
 
