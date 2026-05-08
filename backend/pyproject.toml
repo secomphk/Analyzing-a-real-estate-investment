@@ -17,6 +17,11 @@ python-multipart = "^0.0.9"
 # Persistence
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.27" }
 asyncpg = "^0.29.0"
+# Sync driver for Alembic. The app itself only ever uses asyncpg, but
+# Alembic's online migrations talk to Postgres synchronously and refuse
+# to start without ``psycopg2`` (or ``psycopg2-binary``) on the path.
+# We use the binary build to skip the libpq compile on slim images.
+psycopg2-binary = "^2.9.9"
 alembic = "^1.13.1"
 geoalchemy2 = "^0.14.3"
 redis = "^5.0.1"
