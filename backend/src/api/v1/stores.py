@@ -36,7 +36,10 @@ async def list_stores(
         FROM stores s
         JOIN store_brands sb ON sb.id = s.brand_id
         WHERE (CAST(:brand AS text) IS NULL OR sb.name = :brand)
-          AND (CAST(:store_type AS text) IS NULL OR s.store_type = :store_type)
+          -- ``store_type`` is a Postgres ENUM; comparing against a text
+          -- bind without an explicit cast trips ``DatatypeMismatchError``
+          -- on asyncpg, so coerce the bind to the enum type.
+          AND (CAST(:store_type AS text) IS NULL OR s.store_type = CAST(:store_type AS store_type))
           AND (CAST(:region_code AS text) IS NULL OR s.region_code = :region_code)
         ORDER BY s.id
         LIMIT :limit OFFSET :offset

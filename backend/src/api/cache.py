@@ -120,15 +120,21 @@ async def _persist_run(
             status, finished_at, params, result
         )
         VALUES (
-            :scenario, :entity_type, :entity_id, :params_hash,
-            'completed', NOW(),
+            -- ``scenario`` and ``status`` are Postgres ENUM columns;
+            -- asyncpg passes binds as VARCHAR which then fails ENUM
+            -- equality with ``DatatypeMismatchError`` unless we cast
+            -- explicitly. ``entity_type`` is just String(50) so no cast.
+            CAST(:scenario AS analysis_scenario),
+            :entity_type,
+            :entity_id, :params_hash,
+            'completed'::analysis_status, NOW(),
             CAST(:params AS jsonb),
             CAST(:result AS jsonb)
         )
         ON CONFLICT ON CONSTRAINT uq_analysis_results_scenario_entity_params
         DO UPDATE SET
             result      = EXCLUDED.result,
-            status      = 'completed',
+            status      = 'completed'::analysis_status,
             finished_at = NOW()
         """
     ).bindparams(
