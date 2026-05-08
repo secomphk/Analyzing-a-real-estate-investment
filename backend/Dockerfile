@@ -90,7 +90,11 @@ USER app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+# start-period gives the entrypoint room to run ``alembic upgrade head``
+# (17 tables + PostGIS extensions + GIST indexes can take ~60–120 s on a
+# cold Postgres) before health probes count as failures. Once uvicorn is
+# up the per-probe timeout drops to 5s as usual.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
     CMD curl --fail http://localhost:8000/health || exit 1
 
 # tini is PID 1 so SIGTERM propagates cleanly during rolling deploys; the

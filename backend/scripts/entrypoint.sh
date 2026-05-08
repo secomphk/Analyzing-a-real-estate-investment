@@ -24,8 +24,9 @@ if [[ -n "${MODELS_S3_URI:-}" ]]; then
 fi
 
 if [[ "${MIGRATE_ON_BOOT:-false}" == "true" ]]; then
-    log "running alembic upgrade head"
+    log "running alembic upgrade head (cold Postgres + PostGIS can take 60-120s)"
     alembic upgrade head
+    log "alembic migration complete"
 fi
 
 WORKERS="${UVICORN_WORKERS:-1}"
