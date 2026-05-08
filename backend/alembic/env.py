@@ -43,8 +43,36 @@ if config.config_file_name is not None:
 
 # Override sqlalchemy.url at runtime from app settings — keeps secrets out of
 # alembic.ini and lets dev/test/prod share one config file.
+#
+# Production hosts (Railway, Render, Fly) only inject ``DATABASE_URL`` —
+# they don't know about our separate ``DATABASE_URL_SYNC``. Derive the
+# sync DSN by swapping the asyncpg driver out of ``database_url`` so we
+# never have two env vars to keep in sync. The explicit
+# ``database_url_sync`` is honoured first when it differs from its
+# default (e.g. local dev pointing Alembic at a different DB).
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url_sync)
+_DEFAULT_SYNC_DSN = (
+    "postgresql://realestate:realestate@localhost:5432/realestate"
+)
+if settings.database_url_sync and settings.database_url_sync != _DEFAULT_SYNC_DSN:
+    sync_url = settings.database_url_sync
+else:
+    # ``postgresql+asyncpg://...`` → ``postgresql+psycopg2://...``. The
+    # +psycopg2 marker is explicit so SQLAlchemy doesn't accidentally pick
+    # asyncpg again under any URL-rewriting middleware.
+    sync_url = settings.database_url.replace(
+        "postgresql+asyncpg://", "postgresql+psycopg2://"
+    ).replace(
+        # Some hosts emit a bare ``postgresql://``; psycopg2 is the
+        # default sync driver so we can leave it alone in that case, but
+        # be explicit if it does come through.
+        "postgresql://", "postgresql+psycopg2://"
+    )
+    # Avoid double-replacement if both prefixes matched.
+    sync_url = sync_url.replace(
+        "postgresql+psycopg2+psycopg2://", "postgresql+psycopg2://"
+    )
+config.set_main_option("sqlalchemy.url", sync_url)
 
 target_metadata = Base.metadata
 
