@@ -30,7 +30,10 @@ async def list_roads(
     sql = text(
         """
         SELECT
-            rs.id, rs.name, rs.route_no, rs.region_code, rs.length_m,
+            rs.id, rs.name, rs.route_no, rs.region_code,
+            -- Cast NUMERIC → DOUBLE PRECISION so JSON emits a number,
+            -- not a string. Frontend Zod expects z.number().
+            rs.length_m::double precision AS length_m,
             (
                 SELECT COUNT(*) FROM road_expansion_stages WHERE road_id = rs.id
             ) AS stage_count
@@ -55,7 +58,9 @@ async def list_roads(
 async def get_road(road_id: int, db: DbSession) -> dict[str, Any]:
     sql_road = text(
         """
-        SELECT id, name, route_no, region_code, length_m, description, source
+        SELECT id, name, route_no, region_code,
+               length_m::double precision AS length_m,
+               description, source
         FROM road_segments
         WHERE id = :id
         """

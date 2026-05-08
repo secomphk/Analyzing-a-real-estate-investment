@@ -31,7 +31,10 @@ async def list_stores(
         SELECT
             s.id, s.name, s.address, s.region_code, s.pnu,
             s.store_type, s.opened_at, s.closed_at,
-            s.land_area_m2, s.building_area_m2,
+            -- Cast NUMERIC → DOUBLE PRECISION so JSON emits numbers
+            -- (frontend Zod expects z.number()).
+            s.land_area_m2::double precision AS land_area_m2,
+            s.building_area_m2::double precision AS building_area_m2,
             sb.name AS brand_name, sb.category AS brand_category
         FROM stores s
         JOIN store_brands sb ON sb.id = s.brand_id
@@ -65,7 +68,10 @@ async def get_store(store_id: int, db: DbSession) -> dict[str, Any]:
         SELECT
             s.id, s.name, s.address, s.region_code, s.pnu,
             s.store_type, s.opened_at, s.closed_at,
-            s.land_area_m2, s.building_area_m2,
+            -- Cast NUMERIC → DOUBLE PRECISION so JSON emits numbers
+            -- (frontend Zod expects z.number()).
+            s.land_area_m2::double precision AS land_area_m2,
+            s.building_area_m2::double precision AS building_area_m2,
             sb.name AS brand_name, sb.category AS brand_category,
             ST_X(s.location) AS lng, ST_Y(s.location) AS lat
         FROM stores s

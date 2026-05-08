@@ -32,7 +32,13 @@ async def list_projects(
         """
         SELECT
             p.id, p.name, p.project_type, p.region_code,
-            p.area_ha, p.expected_compensation_billion_krw,
+            -- Cast NUMERIC → DOUBLE PRECISION so the JSON encoder emits
+            -- a number instead of a string ("7600.00"). The frontend
+            -- Zod schemas declare these as ``z.number()`` and reject
+            -- string-shaped numbers.
+            p.area_ha::double precision AS area_ha,
+            p.expected_compensation_billion_krw::double precision
+                AS expected_compensation_billion_krw,
             p.planned_announcement_date, p.planned_completion_date,
             (SELECT COUNT(*) FROM project_stages WHERE project_id = p.id) AS stage_count
         FROM projects p
@@ -67,7 +73,9 @@ async def get_project(project_id: int, db: DbSession) -> dict[str, Any]:
     sql_project = text(
         """
         SELECT p.id, p.name, p.project_type, p.region_code,
-               p.area_ha, p.expected_compensation_billion_krw,
+               p.area_ha::double precision AS area_ha,
+               p.expected_compensation_billion_krw::double precision
+                   AS expected_compensation_billion_krw,
                p.planned_announcement_date, p.planned_completion_date,
                p.description, p.source
         FROM projects p
