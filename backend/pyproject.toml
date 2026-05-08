@@ -24,7 +24,7 @@ asyncpg = "^0.29.0"
 psycopg2-binary = "^2.9.9"
 alembic = "^1.13.1"
 geoalchemy2 = "^0.14.3"
-redis = "^5.0.1"
+redis = ">=5.0.1,<8.0.0"
 
 # Validation / settings
 pydantic = "^2.6.0"
