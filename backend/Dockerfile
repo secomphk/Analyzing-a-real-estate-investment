@@ -22,17 +22,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     POETRY_NO_INTERACTION=1
 
-# Build deps for geospatial / ML stack (geopandas, shapely, prophet, faiss)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        curl \
-        git \
-        libpq-dev \
-        gdal-bin \
-        libgdal-dev \
-        libgeos-dev \
-        libproj-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Build deps for geospatial / ML stack (geopandas, shapely, prophet, faiss).
+# Retry apt up to 3× — Railway's build network occasionally drops packages
+# mid-download which would otherwise crash a fresh build with no diagnostic.
+RUN set -eux; \
+    for i in 1 2 3; do \
+        apt-get update && \
+        apt-get install -y --no-install-recommends --fix-missing \
+            build-essential \
+            curl \
+            git \
+            libpq-dev \
+            gdal-bin \
+            libgdal-dev \
+            libgeos-dev \
+            libproj-dev \
+        && break || { echo "apt retry $i"; sleep 5; rm -rf /var/lib/apt/lists/*; }; \
+    done && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN pip install "poetry==${POETRY_VERSION}"
 
@@ -51,16 +58,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH=/app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpq5 \
-        libgdal32 \
-        libgeos-c1v5 \
-        libproj25 \
-        curl \
-        tini \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system app \
-    && useradd --system --gid app --home-dir /app --shell /bin/bash app
+RUN set -eux; \
+    for i in 1 2 3; do \
+        apt-get update && \
+        apt-get install -y --no-install-recommends --fix-missing \
+            libpq5 \
+            libgdal32 \
+            libgeos-c1v5 \
+            libproj25 \
+            curl \
+            tini \
+        && break || { echo "apt retry $i"; sleep 5; rm -rf /var/lib/apt/lists/*; }; \
+    done && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --system app && \
+    useradd --system --gid app --home-dir /app --shell /bin/bash app
 
 WORKDIR /app
 
